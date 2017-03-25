@@ -99,15 +99,15 @@ func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
 	buf, err = readBOM(rd)
 
 	if len(buf) >= 4 {
-		if buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0xFE && buf[3] == 0xFF {
+		if isUTF32BigEndianBOM4(buf) {
 			return UTF32BigEndian, nilIfEmpty(buf[4:]), err
 		}
-		if buf[0] == 0xFF && buf[1] == 0xFE && buf[2] == 0x00 && buf[3] == 0x00 {
+		if isUTF32LittleEndianBOM4(buf) {
 			return UTF32LittleEndian, nilIfEmpty(buf[4:]), err
 		}
 	}
 
-	if len(buf) > 2 && buf[0] == 0xEF && buf[1] == 0xBB && buf[2] == 0xBF {
+	if len(buf) > 2 && isUTF8BOM3(buf) {
 		return UTF8, nilIfEmpty(buf[3:]), err
 	}
 
@@ -115,10 +115,10 @@ func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
 		return Unknown, nilIfEmpty(buf), err
 	}
 
-	if buf[0] == 0xFE && buf[1] == 0xFF {
+	if isUTF16BigEndianBOM2(buf) {
 		return UTF16BigEndian, nilIfEmpty(buf[2:]), err
 	}
-	if buf[0] == 0xFF && buf[1] == 0xFE {
+	if isUTF16LittleEndianBOM2(buf) {
 		return UTF16LittleEndian, nilIfEmpty(buf[2:]), err
 	}
 
@@ -144,6 +144,26 @@ func readBOM(rd io.Reader) (buf []byte, err error) {
 		}
 	}
 	return
+}
+
+func isUTF32BigEndianBOM4(buf []byte) bool {
+	return buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0xFE && buf[3] == 0xFF
+}
+
+func isUTF32LittleEndianBOM4(buf []byte) bool {
+	return buf[0] == 0xFF && buf[1] == 0xFE && buf[2] == 0x00 && buf[3] == 0x00
+}
+
+func isUTF8BOM3(buf []byte) bool {
+	return buf[0] == 0xEF && buf[1] == 0xBB && buf[2] == 0xBF
+}
+
+func isUTF16BigEndianBOM2(buf []byte) bool {
+	return buf[0] == 0xFE && buf[1] == 0xFF
+}
+
+func isUTF16LittleEndianBOM2(buf []byte) bool {
+	return buf[0] == 0xFF && buf[1] == 0xFE
 }
 
 func nilIfEmpty(buf []byte) (res []byte) {
