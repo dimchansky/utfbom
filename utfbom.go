@@ -96,6 +96,36 @@ func (r *Reader) readErr() error {
 var errNegativeRead = errors.New("utfbom: reader returned negative count from Read")
 
 func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
+	buf, err = readBOM(rd)
+
+	if len(buf) >= 4 {
+		if buf[0] == 0x00 && buf[1] == 0x00 && buf[2] == 0xFE && buf[3] == 0xFF {
+			return UTF32BigEndian, nilIfEmpty(buf[4:]), err
+		}
+		if buf[0] == 0xFF && buf[1] == 0xFE && buf[2] == 0x00 && buf[3] == 0x00 {
+			return UTF32LittleEndian, nilIfEmpty(buf[4:]), err
+		}
+	}
+
+	if len(buf) > 2 && buf[0] == 0xEF && buf[1] == 0xBB && buf[2] == 0xBF {
+		return UTF8, nilIfEmpty(buf[3:]), err
+	}
+
+	if (err != nil && err != io.EOF) || (len(buf) < 2) {
+		return Unknown, nilIfEmpty(buf), err
+	}
+
+	if buf[0] == 0xFE && buf[1] == 0xFF {
+		return UTF16BigEndian, nilIfEmpty(buf[2:]), err
+	}
+	if buf[0] == 0xFF && buf[1] == 0xFE {
+		return UTF16LittleEndian, nilIfEmpty(buf[2:]), err
+	}
+
+	return Unknown, nilIfEmpty(buf), err
+}
+
+func readBOM(rd io.Reader) (buf []byte, err error) {
 	const maxBOMSize = 4
 	var bom [maxBOMSize]byte // used to read BOM
 
@@ -113,32 +143,7 @@ func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
 			}
 		}
 	}
-
-	if len(buf) == maxBOMSize {
-		if bom[0] == 0x00 && bom[1] == 0x00 && bom[2] == 0xFE && bom[3] == 0xFF {
-			return UTF32BigEndian, nil, err
-		}
-		if bom[0] == 0xFF && bom[1] == 0xFE && bom[2] == 0x00 && bom[3] == 0x00 {
-			return UTF32LittleEndian, nil, err
-		}
-	}
-
-	if len(buf) > 2 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF {
-		return UTF8, nilIfEmpty(buf[3:]), err
-	}
-
-	if (err != nil && err != io.EOF) || (len(buf) < 2) {
-		return Unknown, nilIfEmpty(buf), err
-	}
-
-	if bom[0] == 0xFE && bom[1] == 0xFF {
-		return UTF16BigEndian, nilIfEmpty(buf[2:]), err
-	}
-	if bom[0] == 0xFF && bom[1] == 0xFE {
-		return UTF16LittleEndian, nilIfEmpty(buf[2:]), err
-	}
-
-	return Unknown, nilIfEmpty(buf), err
+	return
 }
 
 func nilIfEmpty(buf []byte) (res []byte) {
