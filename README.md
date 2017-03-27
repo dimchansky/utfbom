@@ -26,14 +26,7 @@ func main() {
 
 func trySkip(byteData []byte) {
 	fmt.Println("Input:", byteData)
-	output, err := ioutil.ReadAll(bytes.NewReader(byteData))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("ReadAll:", output)
-
-	output, err = ioutil.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
+	output, err := ioutil.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -48,11 +41,9 @@ Output:
 ```
 $ go run main.go
 Input: [239 187 191 104 101 108 108 111]
-ReadAll: [239 187 191 104 101 108 108 111]
 ReadAll with BOM skipping [104 101 108 108 111]
 
 Input: [104 101 108 108 111]
-ReadAll: [104 101 108 108 111]
 ReadAll with BOM skipping [104 101 108 108 111]
 ```
 
