@@ -26,12 +26,39 @@ func main() {
 
 func trySkip(byteData []byte) {
 	fmt.Println("Input:", byteData)
+
+	// just skip BOM
 	output, err := ioutil.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Println("ReadAll with BOM skipping", output)
+
+	// skip BOM and detect encoding
+	sr, enc := utfbom.Skip(bytes.NewReader(byteData))
+	var encStr string
+	switch enc {
+	case utfbom.UTF8:
+		encStr = "UTF8"
+	case utfbom.UTF16BigEndian:
+		encStr = "UTF16 big endian"
+	case utfbom.UTF16LittleEndian:
+		encStr = "UTF16 little endian"
+	case utfbom.UTF32BigEndian:
+		encStr = "UTF32 big endian"
+	case utfbom.UTF32LittleEndian:
+		encStr = "UTF32 little endian"
+	default:
+		encStr = "Unknown, no byte-order mark found"
+	}
+	fmt.Println("Detected encoding:", encStr)
+	output, err = ioutil.ReadAll(sr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("ReadAll with BOM detection and skipping", output)
 	fmt.Println()
 }
 ```
@@ -42,9 +69,13 @@ Output:
 $ go run main.go
 Input: [239 187 191 104 101 108 108 111]
 ReadAll with BOM skipping [104 101 108 108 111]
+Detected encoding: UTF8
+ReadAll with BOM detection and skipping [104 101 108 108 111]
 
 Input: [104 101 108 108 111]
 ReadAll with BOM skipping [104 101 108 108 111]
+Detected encoding: Unknown, no byte-order mark found
+ReadAll with BOM detection and skipping [104 101 108 108 111]
 ```
 
 
