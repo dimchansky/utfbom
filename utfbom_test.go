@@ -2,6 +2,7 @@ package utfbom_test
 
 import (
 	"io"
+	"errors"
 	"reflect"
 	"testing"
 	"testing/iotest"
@@ -125,7 +126,7 @@ func TestSkip(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if err != tc.inputError {
+					if ! errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
@@ -159,7 +160,7 @@ func TestSkipSkip(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if err != tc.inputError {
+					if ! errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
@@ -189,7 +190,7 @@ func TestSkipOnly(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if err != tc.inputError {
+					if ! errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
