@@ -1,8 +1,10 @@
 package utfbom_test
 
 import (
-	"io"
+	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"reflect"
 	"testing"
 	"testing/iotest"
@@ -126,7 +128,7 @@ func TestSkip(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if ! errors.Is(err, tc.inputError) {
+					if !errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
@@ -160,7 +162,7 @@ func TestSkipSkip(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if ! errors.Is(err, tc.inputError) {
+					if !errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
@@ -190,7 +192,7 @@ func TestSkipOnly(t *testing.T) {
 					if !reflect.DeepEqual(output, tc.output) {
 						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
 					}
-					if ! errors.Is(err, tc.inputError) {
+					if !errors.Is(err, tc.inputError) {
 						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
 					}
 				})
@@ -310,4 +312,40 @@ func TestEncoding_String(t *testing.T) {
 	if s != "Unknown" {
 		t.Errorf("wrong string '%s' for invalid encoding", s)
 	}
+}
+
+func ExampleSkipOnly() {
+	byteData := []byte("\xEF\xBB\xBFhello")
+
+	fmt.Println("Input:", byteData)
+
+	output, err := io.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("ReadAll with BOM skipping", output)
+
+	// Output:
+	// Input: [239 187 191 104 101 108 108 111]
+	// ReadAll with BOM skipping [104 101 108 108 111]
+}
+
+func ExampleSkip() {
+	byteData := []byte("\xEF\xBB\xBFhello")
+
+	sr, enc := utfbom.Skip(bytes.NewReader(byteData))
+
+	fmt.Printf("Detected encoding: %s\n", enc)
+
+	output, err := io.ReadAll(sr)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("ReadAll with BOM detection and skipping", output)
+
+	// Output:
+	// Detected encoding: UTF8
+	// ReadAll with BOM detection and skipping [104 101 108 108 111]
 }
