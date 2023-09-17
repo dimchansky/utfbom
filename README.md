@@ -14,7 +14,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 
 	"github.com/dimchansky/utfbom"
 )
@@ -28,7 +28,7 @@ func trySkip(byteData []byte) {
 	fmt.Println("Input:", byteData)
 
 	// just skip BOM
-	output, err := ioutil.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
+	output, err := io.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -38,7 +38,7 @@ func trySkip(byteData []byte) {
 	// skip BOM and detect encoding
 	sr, enc := utfbom.Skip(bytes.NewReader(byteData))
 	fmt.Printf("Detected encoding: %s\n", enc)
-	output, err = ioutil.ReadAll(sr)
+	output, err = io.ReadAll(sr)
 	if err != nil {
 		fmt.Println(err)
 		return
