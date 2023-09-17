@@ -1,4 +1,4 @@
-.PHONY: test test_race test_cover fmt vet fix
+.PHONY: test test_race test_cover fmt vet lint fix
 
 test:
 	@go test .
@@ -16,8 +16,11 @@ fmt:
 vet:
 	@go vet .
 
+lint:
+	@golint ./...
+
 fix:
 	@go fix .
 
-task: fix vet fmt test test_race test_cover
+task: fix fmt vet lint test test_race test_cover
 	@echo "running..."
