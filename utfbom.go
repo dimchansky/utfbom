@@ -8,6 +8,8 @@ import (
 	"io"
 )
 
+var _ io.Reader = (*Reader)(nil)
+
 // Encoding is type alias for detected UTF encoding.
 type Encoding int
 
