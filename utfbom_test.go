@@ -102,63 +102,99 @@ var readMakers = []struct {
 }
 
 func TestSkip(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range testCases {
-		for _, readMaker := range readMakers {
-			r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			sr, enc := utfbom.Skip(r)
-			if enc != tc.encoding {
-				t.Fatalf("test %v reader=%s: expected encoding %v, but got %v", tc.name, readMaker.name, tc.encoding, enc)
-			}
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
 
-			output, err := io.ReadAll(sr)
-			if !reflect.DeepEqual(output, tc.output) {
-				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+
+					sr, enc := utfbom.Skip(r)
+					if enc != tc.encoding {
+						t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
+					}
+
+					output, err := io.ReadAll(sr)
+					if !reflect.DeepEqual(output, tc.output) {
+						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+					}
+					if err != tc.inputError {
+						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+					}
+				})
 			}
-			if err != tc.inputError {
-				t.Fatalf("test %v reader=%s: expected to get %+#v error, but got %+#v", tc.name, readMaker.name, tc.inputError, err)
-			}
-		}
+		})
 	}
 }
 
 func TestSkipSkip(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range testCases {
-		for _, readMaker := range readMakers {
-			r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			sr0, _ := utfbom.Skip(r)
-			sr, enc := utfbom.Skip(sr0)
-			if enc != utfbom.Unknown {
-				t.Fatalf("test %v reader=%s: expected encoding %v, but got %v", tc.name, readMaker.name, utfbom.Unknown, enc)
-			}
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
 
-			output, err := io.ReadAll(sr)
-			if !reflect.DeepEqual(output, tc.output) {
-				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+
+					sr0, _ := utfbom.Skip(r)
+					sr, enc := utfbom.Skip(sr0)
+					if enc != tc.encoding {
+						t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
+					}
+
+					output, err := io.ReadAll(sr)
+					if !reflect.DeepEqual(output, tc.output) {
+						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+					}
+					if err != tc.inputError {
+						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+					}
+				})
 			}
-			if err != tc.inputError {
-				t.Fatalf("test %v reader=%s: expected to get %+#v error, but got %+#v", tc.name, readMaker.name, tc.inputError, err)
-			}
-		}
+		})
 	}
 }
 
 func TestSkipOnly(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range testCases {
-		for _, readMaker := range readMakers {
-			r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			sr := utfbom.SkipOnly(r)
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
 
-			output, err := io.ReadAll(sr)
-			if !reflect.DeepEqual(output, tc.output) {
-				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+
+					sr := utfbom.SkipOnly(r)
+
+					output, err := io.ReadAll(sr)
+					if !reflect.DeepEqual(output, tc.output) {
+						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+					}
+					if err != tc.inputError {
+						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+					}
+				})
 			}
-			if err != tc.inputError {
-				t.Fatalf("test %v reader=%s: expected to get %+#v error, but got %+#v", tc.name, readMaker.name, tc.inputError, err)
-			}
-		}
+		})
 	}
 }
 
@@ -174,6 +210,8 @@ type readerEncoding struct {
 }
 
 func TestSkipZeroReader(t *testing.T) {
+	t.Parallel()
+
 	var z zeroReader
 
 	c := make(chan readerEncoding)
@@ -202,6 +240,8 @@ func TestSkipZeroReader(t *testing.T) {
 }
 
 func TestSkipOnlyZeroReader(t *testing.T) {
+	t.Parallel()
+
 	var z zeroReader
 
 	c := make(chan *utfbom.Reader)
@@ -226,30 +266,45 @@ func TestSkipOnlyZeroReader(t *testing.T) {
 }
 
 func TestReader_ReadEmpty(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range testCases {
-		for _, readMaker := range readMakers {
-			r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
 
-			sr := utfbom.SkipOnly(r)
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
 
-			n, err := sr.Read(nil)
-			if n != 0 {
-				t.Fatalf("test %v reader=%s: expected to read zero bytes, but got %v", tc.name, readMaker.name, n)
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+
+					sr := utfbom.SkipOnly(r)
+
+					n, err := sr.Read(nil)
+					if n != 0 {
+						t.Fatalf("test %v reader=%s: expected to read zero bytes, but got %v", tc.name, readMaker.name, n)
+					}
+					if err != nil {
+						t.Fatalf("test %v reader=%s: expected to get <nil> error, but got %+#v", tc.name, readMaker.name, err)
+					}
+				})
 			}
-			if err != nil {
-				t.Fatalf("test %v reader=%s: expected to get <nil> error, but got %+#v", tc.name, readMaker.name, err)
-			}
-		}
+		})
 	}
 }
 
 func TestEncoding_String(t *testing.T) {
+	t.Parallel()
+
 	for e := utfbom.Unknown; e <= utfbom.UTF32LittleEndian; e++ {
 		s := e.String()
 		if s == "" {
 			t.Errorf("no string for %#v", e)
 		}
 	}
+
 	s := utfbom.Encoding(999).String()
 	if s != "Unknown" {
 		t.Errorf("wrong string '%s' for invalid encoding", s)

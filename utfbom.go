@@ -61,7 +61,7 @@ func Skip(rd io.Reader) (*Reader, Encoding) {
 	// Is it already a Reader?
 	b, ok := rd.(*Reader)
 	if ok {
-		return b, Unknown
+		return b, b.enc
 	}
 
 	enc, left, err := detectUtf(rd)
@@ -69,6 +69,7 @@ func Skip(rd io.Reader) (*Reader, Encoding) {
 		rd:  rd,
 		buf: left,
 		err: err,
+		enc: enc,
 	}, enc
 }
 
@@ -84,6 +85,7 @@ type Reader struct {
 	rd  io.Reader // reader provided by the client
 	buf []byte    // buffered data
 	err error     // last error
+	enc Encoding  // encoding
 }
 
 // Read is an implementation of io.Reader interface.
