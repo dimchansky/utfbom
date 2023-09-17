@@ -2,7 +2,6 @@ package utfbom
 
 import (
 	"io"
-	"io/ioutil"
 	"reflect"
 	"testing"
 	"testing/iotest"
@@ -100,7 +99,7 @@ func TestSkip(t *testing.T) {
 				t.Fatalf("test %v reader=%s: expected encoding %v, but got %v", tc.name, readMaker.name, tc.encoding, enc)
 			}
 
-			output, err := ioutil.ReadAll(sr)
+			output, err := io.ReadAll(sr)
 			if !reflect.DeepEqual(output, tc.output) {
 				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
 			}
@@ -122,7 +121,7 @@ func TestSkipSkip(t *testing.T) {
 				t.Fatalf("test %v reader=%s: expected encoding %v, but got %v", tc.name, readMaker.name, Unknown, enc)
 			}
 
-			output, err := ioutil.ReadAll(sr)
+			output, err := io.ReadAll(sr)
 			if !reflect.DeepEqual(output, tc.output) {
 				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
 			}
@@ -140,7 +139,7 @@ func TestSkipOnly(t *testing.T) {
 
 			sr := SkipOnly(r)
 
-			output, err := ioutil.ReadAll(sr)
+			output, err := io.ReadAll(sr)
 			if !reflect.DeepEqual(output, tc.output) {
 				t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
 			}
