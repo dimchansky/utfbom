@@ -63,6 +63,10 @@ var testCases = []struct {
 	{"21", []byte("\xFF\xFE"), io.ErrClosedPipe, utfbom.Unknown, []byte{0xFF, 0xFE}},
 	{"22", []byte("\xFF"), io.ErrClosedPipe, utfbom.Unknown, []byte{0xFF}},
 	{"23", []byte("\x68\x65"), nil, utfbom.Unknown, []byte{0x68, 0x65}},
+	{"24", []byte("\ufeff"), nil, utfbom.UTF8, []byte{}},
+	{"25", []byte("\ufeffhello"), nil, utfbom.UTF8, []byte("hello")},
+	{"26", []byte("hello\ufeffworld"), nil, utfbom.Unknown, []byte("hello\ufeffworld")},
+	{"27", []byte("\ufeffhello\ufeffworld"), nil, utfbom.UTF8, []byte("hello\ufeffworld")},
 }
 
 type sliceReader struct {
@@ -311,6 +315,178 @@ func TestEncoding_String(t *testing.T) {
 	s := utfbom.Encoding(999).String()
 	if s != "Unknown" {
 		t.Errorf("wrong string '%s' for invalid encoding", s)
+	}
+}
+
+func TestBOMConstant(t *testing.T) {
+	t.Parallel()
+
+	if utfbom.BOM != '\ufeff' {
+		t.Fatalf("expected utfbom.BOM to be '\\ufeff', got %q", utfbom.BOM)
+	}
+	if string(utfbom.BOM) != "\ufeff" {
+		t.Fatalf("expected string(utfbom.BOM) to be \"\\ufeff\", got %q", string(utfbom.BOM))
+	}
+	if !bytes.Equal([]byte(string(utfbom.BOM)), []byte{0xEF, 0xBB, 0xBF}) {
+		t.Fatalf("expected BOM UTF-8 bytes to be [0xEF, 0xBB, 0xBF], got %v", []byte(string(utfbom.BOM)))
+	}
+}
+
+func TestBOMRuneRemoval(t *testing.T) {
+	t.Parallel()
+
+	testInputs := []struct {
+		name     string
+		input    string
+		expected string
+		enc      utfbom.Encoding
+	}{
+		{"empty with BOM", "\ufeff", "", utfbom.UTF8},
+		{"word with BOM", "\ufeffhello", "hello", utfbom.UTF8},
+		{"BOM constant prefix", string(utfbom.BOM) + "world", "world", utfbom.UTF8},
+		{"no BOM", "plain text", "plain text", utfbom.Unknown},
+		{"BOM in middle preserved", "hello\ufeffworld", "hello\ufeffworld", utfbom.Unknown},
+		{"leading BOM stripped middle preserved", "\ufeffhello\ufeffworld", "hello\ufeffworld", utfbom.UTF8},
+	}
+
+	for _, tc := range testInputs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sr, enc := utfbom.Skip(bytes.NewReader([]byte(tc.input)))
+			if enc != tc.enc {
+				t.Fatalf("expected encoding %v, got %v", tc.enc, enc)
+			}
+			out, err := io.ReadAll(sr)
+			if err != nil {
+				t.Fatalf("unexpected read error: %v", err)
+			}
+			if string(out) != tc.expected {
+				t.Fatalf("expected output %q, got %q", tc.expected, string(out))
+			}
+
+			so := utfbom.SkipOnly(bytes.NewReader([]byte(tc.input)))
+			out, err = io.ReadAll(so)
+			if err != nil {
+				t.Fatalf("unexpected read error: %v", err)
+			}
+			if string(out) != tc.expected {
+				t.Fatalf("expected output %q, got %q", tc.expected, string(out))
+			}
+		})
+	}
+}
+
+func TestBOMRuneRemoval_AllEncodings(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		input       []byte
+		expectedEnc utfbom.Encoding
+		expectedOut []byte
+	}{
+		{
+			name:        "UTF8 with BOM",
+			input:       []byte("\ufeffsample text"),
+			expectedEnc: utfbom.UTF8,
+			expectedOut: []byte("sample text"),
+		},
+		{
+			name:        "UTF16-BE with BOM",
+			input:       []byte{0xFE, 0xFF, 0x00, 'A', 0x00, 'B'},
+			expectedEnc: utfbom.UTF16BigEndian,
+			expectedOut: []byte{0x00, 'A', 0x00, 'B'},
+		},
+		{
+			name:        "UTF16-LE with BOM",
+			input:       []byte{0xFF, 0xFE, 'A', 0x00, 'B', 0x00},
+			expectedEnc: utfbom.UTF16LittleEndian,
+			expectedOut: []byte{'A', 0x00, 'B', 0x00},
+		},
+		{
+			name:        "UTF32-BE with BOM",
+			input:       []byte{0x00, 0x00, 0xFE, 0xFF, 0x00, 0x00, 0x00, 'A'},
+			expectedEnc: utfbom.UTF32BigEndian,
+			expectedOut: []byte{0x00, 0x00, 0x00, 'A'},
+		},
+		{
+			name:        "UTF32-LE with BOM",
+			input:       []byte{0xFF, 0xFE, 0x00, 0x00, 'A', 0x00, 0x00, 0x00},
+			expectedEnc: utfbom.UTF32LittleEndian,
+			expectedOut: []byte{'A', 0x00, 0x00, 0x00},
+		},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			sr, enc := utfbom.Skip(bytes.NewReader(c.input))
+			if enc != c.expectedEnc {
+				t.Fatalf("expected encoding %v, got %v", c.expectedEnc, enc)
+			}
+			if sr.Encoding() != c.expectedEnc {
+				t.Fatalf("expected Reader.Encoding() %v, got %v", c.expectedEnc, sr.Encoding())
+			}
+			out, err := io.ReadAll(sr)
+			if err != nil {
+				t.Fatalf("unexpected read error: %v", err)
+			}
+			if !bytes.Equal(out, c.expectedOut) {
+				t.Fatalf("expected %v, got %v", c.expectedOut, out)
+			}
+		})
+	}
+}
+
+func TestBOMRuneRemoval_IncrementalReads(t *testing.T) {
+	t.Parallel()
+
+	input := []byte("\ufeffstream-content-without-bom")
+	expected := []byte("stream-content-without-bom")
+
+	for bufSize := 1; bufSize <= 16; bufSize++ {
+		bufSize := bufSize
+		t.Run(fmt.Sprintf("bufSize=%d", bufSize), func(t *testing.T) {
+			t.Parallel()
+
+			sr := utfbom.SkipOnly(bytes.NewReader(input))
+			var result []byte
+			buf := make([]byte, bufSize)
+			for {
+				n, err := sr.Read(buf)
+				if n > 0 {
+					result = append(result, buf[:n]...)
+				}
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+
+			if !bytes.Equal(result, expected) {
+				t.Fatalf("expected %q, got %q", string(expected), string(result))
+			}
+		})
+	}
+}
+
+func TestReader_Encoding(t *testing.T) {
+	t.Parallel()
+
+	sr, _ := utfbom.Skip(bytes.NewReader([]byte("\ufeffhello")))
+	if sr.Encoding() != utfbom.UTF8 {
+		t.Fatalf("expected UTF8, got %v", sr.Encoding())
+	}
+
+	so := utfbom.SkipOnly(bytes.NewReader([]byte{0xFE, 0xFF, 0x00, 0x41}))
+	if so.Encoding() != utfbom.UTF16BigEndian {
+		t.Fatalf("expected UTF16BigEndian, got %v", so.Encoding())
 	}
 }
 

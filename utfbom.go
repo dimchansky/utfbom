@@ -10,6 +10,9 @@ import (
 
 var _ io.Reader = (*Reader)(nil)
 
+// BOM is the Unicode Byte Order Mark character (\ufeff), also known as ZERO WIDTH NO-BREAK SPACE.
+const BOM = '\ufeff'
+
 // Encoding is type alias for detected UTF encoding.
 type Encoding int
 
@@ -86,6 +89,11 @@ type Reader struct {
 	buf []byte    // buffered data
 	err error     // last error
 	enc Encoding  // encoding
+}
+
+// Encoding returns the detected UTF encoding.
+func (r *Reader) Encoding() Encoding {
+	return r.enc
 }
 
 // Read is an implementation of io.Reader interface.
