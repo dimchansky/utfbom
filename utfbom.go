@@ -65,6 +65,29 @@ func Skip(rd io.Reader) (*Reader, Encoding) {
 	}
 
 	enc, left, err := detectUtf(rd)
+	if enc == Unknown {
+		const maxDepth = 100
+		depth := 0
+		for cur := rd; cur != nil && depth < maxDepth; depth++ {
+			if r, isReader := cur.(*Reader); isReader {
+				if r.enc != Unknown {
+					enc = r.enc
+					break
+				}
+			} else if e, hasEncoding := cur.(interface{ Encoding() Encoding }); hasEncoding {
+				if detected := e.Encoding(); detected != Unknown {
+					enc = detected
+					break
+				}
+			}
+			if u, canUnwrap := cur.(interface{ Unwrap() io.Reader }); canUnwrap {
+				cur = u.Unwrap()
+			} else {
+				break
+			}
+		}
+	}
+
 	return &Reader{
 		rd:  rd,
 		buf: left,
@@ -113,6 +136,22 @@ func (r *Reader) readErr() error {
 	err := r.err
 	r.err = nil
 	return err
+}
+
+// Encoding returns the detected encoding.
+func (r *Reader) Encoding() Encoding {
+	if r == nil {
+		return Unknown
+	}
+	return r.enc
+}
+
+// Unwrap returns the underlying io.Reader.
+func (r *Reader) Unwrap() io.Reader {
+	if r == nil {
+		return nil
+	}
+	return r.rd
 }
 
 var errNegativeRead = errors.New("utfbom: reader returned negative count from Read")

@@ -314,6 +314,232 @@ func TestEncoding_String(t *testing.T) {
 	}
 }
 
+type unwrappingReader struct {
+	rd io.Reader
+}
+
+func (u *unwrappingReader) Read(p []byte) (n int, err error) {
+	return u.rd.Read(p)
+}
+
+func (u *unwrappingReader) Unwrap() io.Reader {
+	return u.rd
+}
+
+type encodingReader struct {
+	rd  io.Reader
+	enc utfbom.Encoding
+}
+
+func (e *encodingReader) Read(p []byte) (n int, err error) {
+	return e.rd.Read(p)
+}
+
+func (e *encodingReader) Encoding() utfbom.Encoding {
+	return e.enc
+}
+
+type cyclicReader struct {
+	rd io.Reader
+}
+
+func (c *cyclicReader) Read(p []byte) (n int, err error) {
+	return c.rd.Read(p)
+}
+
+func (c *cyclicReader) Unwrap() io.Reader {
+	return c
+}
+
+func TestReader_Encoding(t *testing.T) {
+	t.Parallel()
+
+	var nilReader *utfbom.Reader
+	if enc := nilReader.Encoding(); enc != utfbom.Unknown {
+		t.Fatalf("expected nil reader encoding to be Unknown, got %v", enc)
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
+
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+					sr := utfbom.SkipOnly(r)
+					if sr.Encoding() != tc.encoding {
+						t.Fatalf("expected encoding %v, but got %v", tc.encoding, sr.Encoding())
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestReader_Unwrap(t *testing.T) {
+	t.Parallel()
+
+	var nilReader *utfbom.Reader
+	if unwrapped := nilReader.Unwrap(); unwrapped != nil {
+		t.Fatalf("expected nil reader unwrap to be nil, got %v", unwrapped)
+	}
+
+	raw := &sliceReader{input: []byte("test")}
+	sr := utfbom.SkipOnly(raw)
+	if sr.Unwrap() != raw {
+		t.Fatalf("expected unwrapped reader to match original reader")
+	}
+}
+
+func TestSkip_NestedReader(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, readMaker := range readMakers {
+				readMaker := readMaker
+				t.Run("reader="+readMaker.name, func(t *testing.T) {
+					t.Parallel()
+
+					r := readMaker.fn(&sliceReader{tc.input, tc.inputError})
+					sr0, _ := utfbom.Skip(r)
+					nested := &unwrappingReader{rd: sr0}
+
+					sr, enc := utfbom.Skip(nested)
+					if enc != tc.encoding {
+						t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
+					}
+					if sr.Encoding() != tc.encoding {
+						t.Fatalf("expected Reader.Encoding %v, but got %v", tc.encoding, sr.Encoding())
+					}
+
+					output, err := io.ReadAll(sr)
+					if !reflect.DeepEqual(output, tc.output) {
+						t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+					}
+					if !errors.Is(err, tc.inputError) {
+						t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestSkip_DeeplyNestedReader(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &sliceReader{tc.input, tc.inputError}
+			sr0, _ := utfbom.Skip(r)
+			layer1 := &unwrappingReader{rd: sr0}
+			layer2 := &unwrappingReader{rd: layer1}
+			layer3 := &unwrappingReader{rd: layer2}
+
+			sr, enc := utfbom.Skip(layer3)
+			if enc != tc.encoding {
+				t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
+			}
+			if sr.Encoding() != tc.encoding {
+				t.Fatalf("expected Reader.Encoding %v, but got %v", tc.encoding, sr.Encoding())
+			}
+
+			output, err := io.ReadAll(sr)
+			if !reflect.DeepEqual(output, tc.output) {
+				t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+			}
+			if !errors.Is(err, tc.inputError) {
+				t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+			}
+		})
+	}
+}
+
+func TestSkip_EncodingInterface(t *testing.T) {
+	t.Parallel()
+
+	r := bytes.NewReader([]byte("raw content without bom"))
+	custom := &encodingReader{
+		rd:  r,
+		enc: utfbom.UTF16BigEndian,
+	}
+
+	sr, enc := utfbom.Skip(custom)
+	if enc != utfbom.UTF16BigEndian {
+		t.Fatalf("expected UTF16BigEndian, got %v", enc)
+	}
+	if sr.Encoding() != utfbom.UTF16BigEndian {
+		t.Fatalf("expected Reader.Encoding to be UTF16BigEndian, got %v", sr.Encoding())
+	}
+
+	output, err := io.ReadAll(sr)
+	if err != nil {
+		t.Fatalf("unexpected read error: %v", err)
+	}
+	if string(output) != "raw content without bom" {
+		t.Fatalf("expected 'raw content without bom', got '%s'", string(output))
+	}
+}
+
+func TestSkip_CyclicUnwrap(t *testing.T) {
+	t.Parallel()
+
+	c := &cyclicReader{rd: bytes.NewReader([]byte("hello"))}
+	sr, enc := utfbom.Skip(c)
+	if enc != utfbom.Unknown {
+		t.Fatalf("expected Unknown for cyclic reader without bom, got %v", enc)
+	}
+	output, err := io.ReadAll(sr)
+	if err != nil {
+		t.Fatalf("unexpected read error: %v", err)
+	}
+	if string(output) != "hello" {
+		t.Fatalf("expected 'hello', got '%s'", string(output))
+	}
+}
+
+func TestSkipOnly_ReWrap(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run("test "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &sliceReader{tc.input, tc.inputError}
+			sr0 := utfbom.SkipOnly(r)
+			sr1 := utfbom.SkipOnly(sr0)
+			sr2, enc := utfbom.Skip(sr1)
+
+			if enc != tc.encoding {
+				t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
+			}
+			if sr2.Encoding() != tc.encoding {
+				t.Fatalf("expected Reader.Encoding %v, but got %v", tc.encoding, sr2.Encoding())
+			}
+
+			output, err := io.ReadAll(sr2)
+			if !reflect.DeepEqual(output, tc.output) {
+				t.Fatalf("expected to read %+#v, but got %+#v", tc.output, output)
+			}
+			if !errors.Is(err, tc.inputError) {
+				t.Fatalf("expected to get %+#v error, but got %+#v", tc.inputError, err)
+			}
+		})
+	}
+}
+
 func ExampleSkipOnly() {
 	byteData := []byte("\xEF\xBB\xBFhello")
 
