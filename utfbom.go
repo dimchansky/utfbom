@@ -54,9 +54,15 @@ func (e Encoding) String() string {
 
 const maxConsecutiveEmptyReads = 100
 
-// Skip creates Reader which automatically detects BOM (Unicode Byte Order Mark) and removes it as necessary.
-// It also returns the encoding detected by the BOM.
-// If the detected encoding is not needed, you can call the SkipOnly function.
+// Skip returns a Reader that reads from rd without its leading BOM (Unicode Byte Order Mark),
+// and the encoding indicated by that BOM, or Unknown if no supported BOM was detected.
+//
+// Skip reads up to 4 bytes from rd before it returns, so it may block. An error
+// that occurs while reading them is not returned by Skip: the returned Reader's Read
+// returns it once, after the bytes that remain after BOM removal.
+//
+// If rd is already a *Reader, Skip returns rd itself and the encoding it detected,
+// without reading from it. Use SkipOnly if the encoding is not needed.
 func Skip(rd io.Reader) (*Reader, Encoding) {
 	// Is it already a Reader?
 	b, ok := rd.(*Reader)
@@ -73,7 +79,8 @@ func Skip(rd io.Reader) (*Reader, Encoding) {
 	}, enc
 }
 
-// SkipOnly creates Reader which automatically detects BOM (Unicode Byte Order Mark) and removes it as necessary.
+// SkipOnly is like Skip but does not return the encoding. It also reads from rd
+// immediately and may block, and an error from that read is returned later by Read.
 func SkipOnly(rd io.Reader) *Reader {
 	r, _ := Skip(rd)
 	return r
