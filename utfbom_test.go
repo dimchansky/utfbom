@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"testing/iotest"
 	"time"
@@ -490,38 +491,40 @@ func TestEncoding_String(t *testing.T) {
 	}
 }
 
-func ExampleSkipOnly() {
-	byteData := []byte("\xEF\xBB\xBFhello")
+func ExampleSkip() {
+	r, enc := utfbom.Skip(strings.NewReader("\xEF\xBB\xBFhello"))
 
-	fmt.Println("Input:", byteData)
-
-	output, err := io.ReadAll(utfbom.SkipOnly(bytes.NewReader(byteData)))
+	data, err := io.ReadAll(r)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("ReadAll with BOM skipping", output)
-
+	fmt.Printf("%s %q\n", enc, data)
 	// Output:
-	// Input: [239 187 191 104 101 108 108 111]
-	// ReadAll with BOM skipping [104 101 108 108 111]
+	// UTF8 "hello"
 }
 
-func ExampleSkip() {
-	byteData := []byte("\xEF\xBB\xBFhello")
-
-	sr, enc := utfbom.Skip(bytes.NewReader(byteData))
-
-	fmt.Printf("Detected encoding: %s\n", enc)
-
-	output, err := io.ReadAll(sr)
+func ExampleSkipOnly() {
+	data, err := io.ReadAll(utfbom.SkipOnly(strings.NewReader("\xEF\xBB\xBFhello")))
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("ReadAll with BOM detection and skipping", output)
-
+	fmt.Printf("%q\n", data)
 	// Output:
-	// Detected encoding: UTF8
-	// ReadAll with BOM detection and skipping [104 101 108 108 111]
+	// "hello"
+}
+
+// The BOM is removed, but the remaining bytes stay UTF-16: nothing is transcoded.
+func ExampleSkip_utf16() {
+	r, enc := utfbom.Skip(strings.NewReader("\xFF\xFEh\x00i\x00"))
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%s % X\n", enc, data)
+	// Output:
+	// UTF16LittleEndian 68 00 69 00
 }

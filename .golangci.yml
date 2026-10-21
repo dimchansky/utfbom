@@ -1,9 +1,4 @@
 version: "2"
-linters:
-  exclusions:
-    rules:
-      - path: '_test\.go'
-        text: 'QF1010'
 formatters:
   enable:
     - gofumpt
