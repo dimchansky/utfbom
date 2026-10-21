@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 1 * *" # monthly: catch breakage when a new Go release becomes "stable"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.19 is the minimum from go.mod; oldstable/stable are the two supported Go releases.
+        go: ["1.19", "oldstable", "stable"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false # no dependencies to cache
+      - run: go vet ./...
+      - run: go test -race -shuffle=on -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+      - if: matrix.go == 'stable'
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
+        with:
+          file: coverage.out
+          format: golang
+          fail-on-error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache: false
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0 # not updated by Dependabot; bump manually
