@@ -371,6 +371,45 @@ func TestSkipUTF16WithErrorAfterFullProbe(t *testing.T) {
 	}
 }
 
+type countingReader struct {
+	r     io.Reader
+	reads int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	c.reads++
+	return c.r.Read(p)
+}
+
+func TestSkipAfterPartialRead(t *testing.T) {
+	t.Parallel()
+
+	src := &countingReader{r: strings.NewReader("\xFE\xFF\x00h\x00i")}
+	sr0, _ := utfbom.Skip(src)
+
+	var b [1]byte
+	if _, err := io.ReadFull(sr0, b[:]); err != nil {
+		t.Fatal(err)
+	}
+
+	reads := src.reads
+	sr, enc := utfbom.Skip(sr0)
+	if sr != sr0 {
+		t.Fatal("expected Skip to return the same *utfbom.Reader")
+	}
+	if enc != utfbom.UTF16BigEndian {
+		t.Fatalf("expected encoding %v, but got %v", utfbom.UTF16BigEndian, enc)
+	}
+	if src.reads != reads {
+		t.Fatalf("expected no source reads during Skip, but got %d", src.reads-reads)
+	}
+
+	output, err := io.ReadAll(sr)
+	if want := []byte("h\x00i"); !bytes.Equal(output, want) || err != nil {
+		t.Fatalf("expected % X and <nil> error, but got % X and %v", want, output, err)
+	}
+}
+
 func TestReader_ReadEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -394,6 +433,15 @@ func TestReader_ReadEmpty(t *testing.T) {
 					}
 					if err != nil {
 						t.Fatalf("test %v reader=%s: expected to get <nil> error, but got %+#v", tc.name, readMaker.name, err)
+					}
+
+					// Read(nil) must not consume buffered data or a pending error.
+					output, err := io.ReadAll(sr)
+					if !bytes.Equal(output, tc.output) {
+						t.Fatalf("test %v reader=%s: expected to read %+#v, but got %+#v", tc.name, readMaker.name, tc.output, output)
+					}
+					if !errors.Is(err, tc.inputError) {
+						t.Fatalf("test %v reader=%s: expected to get %+#v error, but got %+#v", tc.name, readMaker.name, tc.inputError, err)
 					}
 				})
 			}
