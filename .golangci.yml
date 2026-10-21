@@ -1,0 +1,17 @@
+version: "2"
+linters:
+  exclusions:
+    rules:
+      - path: '_test\.go'
+        text: 'QF1010'
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra:
+        group-params: true
+    goimports:
+      local-prefixes:
+        - github.com/dimchansky/utfbom

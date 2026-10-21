@@ -9,15 +9,15 @@ test_race:
 test_cover:
 	@go test -cover -covermode=atomic .
 
+# tested with golangci-lint v2.15.0 (same version as CI)
 fmt:
-	@goimports -w -local github.com/dimchansky/utfbom .
-	@gofumpt -w -extra .
+	@golangci-lint fmt
 
 vet:
 	@go vet .
 
 lint:
-	@golint ./...
+	@golangci-lint run
 
 fix:
 	@go fix .
