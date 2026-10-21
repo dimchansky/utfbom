@@ -154,6 +154,9 @@ func TestSkipSkip(t *testing.T) {
 
 					sr0, _ := utfbom.Skip(r)
 					sr, enc := utfbom.Skip(sr0)
+					if sr != sr0 {
+						t.Fatal("expected Skip to return the same *utfbom.Reader")
+					}
 					if enc != tc.encoding {
 						t.Fatalf("expected encoding %v, but got %v", tc.encoding, enc)
 					}
@@ -397,19 +400,93 @@ func TestReader_ReadEmpty(t *testing.T) {
 	}
 }
 
+func TestReader_SmallBuffers(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range testCases {
+		for size := 1; size <= 4; size++ {
+			sr := utfbom.SkipOnly(&sliceReader{tc.input, tc.inputError})
+
+			var output []byte
+			buf := make([]byte, size)
+			var err error
+			for err == nil {
+				var n int
+				n, err = sr.Read(buf)
+				output = append(output, buf[:n]...)
+			}
+			if !bytes.Equal(output, tc.output) {
+				t.Errorf("test %s, buffer %d: expected to read %+#v, but got %+#v", tc.name, size, tc.output, output)
+			}
+			if wantErr := tc.inputError; wantErr == nil && err != io.EOF || wantErr != nil && !errors.Is(err, wantErr) {
+				t.Errorf("test %s, buffer %d: unexpected error %v", tc.name, size, err)
+			}
+		}
+	}
+}
+
+// FuzzSkip checks BOM detection and payload preservation for streams that end with io.EOF,
+// read whole or one byte at a time. Error schedules are covered by the explicit tests above.
+func FuzzSkip(f *testing.F) {
+	// Independent of the package: longest BOMs first, so FF FE 00 00 is UTF-32LE.
+	boms := []struct {
+		bom []byte
+		enc utfbom.Encoding
+	}{
+		{[]byte{0x00, 0x00, 0xFE, 0xFF}, utfbom.UTF32BigEndian},
+		{[]byte{0xFF, 0xFE, 0x00, 0x00}, utfbom.UTF32LittleEndian},
+		{[]byte{0xEF, 0xBB, 0xBF}, utfbom.UTF8},
+		{[]byte{0xFE, 0xFF}, utfbom.UTF16BigEndian},
+		{[]byte{0xFF, 0xFE}, utfbom.UTF16LittleEndian},
+	}
+
+	for _, tc := range testCases {
+		f.Add(tc.input, false)
+	}
+	f.Add([]byte("\xEF\xBB\xBF\xEF\xBB\xBFhi"), true)
+	f.Add([]byte("hi\xEF\xBB\xBF"), true)
+
+	f.Fuzz(func(t *testing.T, input []byte, oneByte bool) {
+		wantEnc, wantOut := utfbom.Unknown, input
+		for _, b := range boms {
+			if bytes.HasPrefix(input, b.bom) {
+				wantEnc, wantOut = b.enc, input[len(b.bom):]
+				break
+			}
+		}
+
+		var r io.Reader = bytes.NewReader(input)
+		if oneByte {
+			r = iotest.OneByteReader(r)
+		}
+		sr, enc := utfbom.Skip(r)
+		output, err := io.ReadAll(sr)
+		if enc != wantEnc || !bytes.Equal(output, wantOut) || err != nil {
+			t.Fatalf("Skip(% X): got %v, % X, %v; want %v, % X, <nil>", input, enc, output, err, wantEnc, wantOut)
+		}
+	})
+}
+
 func TestEncoding_String(t *testing.T) {
 	t.Parallel()
 
-	for e := utfbom.Unknown; e <= utfbom.UTF32LittleEndian; e++ {
-		s := e.String()
-		if s == "" {
-			t.Errorf("no string for %#v", e)
-		}
+	tests := []struct {
+		enc  utfbom.Encoding
+		want string
+	}{
+		{utfbom.Unknown, "Unknown"},
+		{utfbom.UTF8, "UTF8"},
+		{utfbom.UTF16BigEndian, "UTF16BigEndian"},
+		{utfbom.UTF16LittleEndian, "UTF16LittleEndian"},
+		{utfbom.UTF32BigEndian, "UTF32BigEndian"},
+		{utfbom.UTF32LittleEndian, "UTF32LittleEndian"},
+		{utfbom.Encoding(-1), "Unknown"},
+		{utfbom.Encoding(999), "Unknown"},
 	}
-
-	s := utfbom.Encoding(999).String()
-	if s != "Unknown" {
-		t.Errorf("wrong string '%s' for invalid encoding", s)
+	for _, tt := range tests {
+		if got := tt.enc.String(); got != tt.want {
+			t.Errorf("Encoding(%d).String() = %q, want %q", int(tt.enc), got, tt.want)
+		}
 	}
 }
 
