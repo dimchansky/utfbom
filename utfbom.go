@@ -133,7 +133,9 @@ func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
 		return UTF8, nilIfEmpty(buf[3:]), err
 	}
 
-	if (err != nil && err != io.EOF) || (len(buf) < 2) {
+	// A non-EOF error before all 4 bytes are read leaves FF FE ambiguous (it may start UTF-32LE);
+	// FE FF is kept Unknown in this case too, for compatibility.
+	if (err != nil && err != io.EOF && len(buf) < 4) || len(buf) < 2 {
 		return Unknown, nilIfEmpty(buf), err
 	}
 
@@ -158,7 +160,7 @@ func readBOM(rd io.Reader) (buf []byte, err error) {
 		}
 		if n > 0 {
 			nEmpty = 0
-		} else {
+		} else if err == nil {
 			nEmpty++
 			if nEmpty >= maxConsecutiveEmptyReads {
 				err = io.ErrNoProgress

@@ -268,6 +268,105 @@ func TestSkipOnlyZeroReader(t *testing.T) {
 	}
 }
 
+// scriptedReader returns the given results in order, then io.EOF.
+// Data that does not fit into p is returned by the following calls.
+type scriptedReader []readResult
+
+type readResult struct {
+	data []byte
+	err  error
+}
+
+func (r *scriptedReader) Read(p []byte) (int, error) {
+	if len(*r) == 0 {
+		return 0, io.EOF
+	}
+	res := &(*r)[0]
+	n := copy(p, res.data)
+	if res.data = res.data[n:]; len(res.data) > 0 {
+		return n, nil
+	}
+	*r = (*r)[1:]
+	return n, res.err
+}
+
+func emptyReads(n int) []readResult {
+	return make([]readResult, n)
+}
+
+var errTest = errors.New("test error")
+
+func TestSkipKeepsErrorAfterEmptyReads(t *testing.T) {
+	t.Parallel()
+
+	for _, wantErr := range []error{io.EOF, errTest} {
+		r := scriptedReader(append(emptyReads(99), readResult{err: wantErr}))
+
+		output, err := io.ReadAll(utfbom.SkipOnly(&r))
+		if len(output) != 0 {
+			t.Errorf("expected no output, but got %+#v", output)
+		}
+		if wantErr == io.EOF {
+			wantErr = nil // io.ReadAll reports EOF as success
+		}
+		if err != wantErr {
+			t.Errorf("expected %v error, but got %v", wantErr, err)
+		}
+	}
+}
+
+func TestSkipProgressResetsEmptyReadCount(t *testing.T) {
+	t.Parallel()
+
+	var script []readResult
+	script = append(script, emptyReads(99)...)
+	script = append(script, readResult{data: []byte("\xEF")})
+	script = append(script, emptyReads(99)...)
+	script = append(script, readResult{data: []byte("\xBB\xBFhi")})
+	r := scriptedReader(script)
+
+	sr, enc := utfbom.Skip(&r)
+	if enc != utfbom.UTF8 {
+		t.Fatalf("expected encoding %v, but got %v", utfbom.UTF8, enc)
+	}
+	output, err := io.ReadAll(sr)
+	if string(output) != "hi" || err != nil {
+		t.Fatalf("expected \"hi\" and <nil> error, but got %q and %v", output, err)
+	}
+}
+
+func TestSkipUTF16WithErrorAfterFullProbe(t *testing.T) {
+	t.Parallel()
+
+	inputs := []struct {
+		data     []byte
+		encoding utfbom.Encoding
+	}{
+		{[]byte("\xFE\xFF\x00\x41"), utfbom.UTF16BigEndian},
+		{[]byte("\xFF\xFE\x41\x00"), utfbom.UTF16LittleEndian},
+	}
+	for _, in := range inputs {
+		schedules := map[string]scriptedReader{
+			"error with data": {{data: in.data, err: errTest}},
+			"error next read": {{data: in.data}, {err: errTest}},
+		}
+		for name, r := range schedules {
+			r := r
+			sr, enc := utfbom.Skip(&r)
+			if enc != in.encoding {
+				t.Errorf("% X, %s: expected encoding %v, but got %v", in.data, name, in.encoding, enc)
+			}
+			output, err := io.ReadAll(sr)
+			if !bytes.Equal(output, in.data[2:]) {
+				t.Errorf("% X, %s: expected to read % X, but got % X", in.data, name, in.data[2:], output)
+			}
+			if !errors.Is(err, errTest) {
+				t.Errorf("% X, %s: expected %v error, but got %v", in.data, name, errTest, err)
+			}
+		}
+	}
+}
+
 func TestReader_ReadEmpty(t *testing.T) {
 	t.Parallel()
 
