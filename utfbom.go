@@ -10,7 +10,7 @@ import (
 
 var _ io.Reader = (*Reader)(nil)
 
-// Encoding is type alias for detected UTF encoding.
+// Encoding is a UTF encoding identified by a BOM.
 type Encoding int
 
 // Constants to identify detected UTF encodings.
@@ -79,8 +79,9 @@ func SkipOnly(rd io.Reader) *Reader {
 	return r
 }
 
-// Reader implements automatic BOM (Unicode Byte Order Mark) checking and
-// removing as necessary for an io.Reader object.
+// Reader is an io.Reader that returns the bytes of the underlying reader
+// without the leading BOM (Unicode Byte Order Mark). Create it with Skip or SkipOnly.
+// Reader does not close the underlying reader.
 type Reader struct {
 	rd  io.Reader // reader provided by the client
 	buf []byte    // buffered data
@@ -88,8 +89,9 @@ type Reader struct {
 	enc Encoding  // encoding
 }
 
-// Read is an implementation of io.Reader interface.
-// The bytes are taken from the underlying Reader, but it checks for BOMs, removing them as necessary.
+// Read implements io.Reader. The BOM is detected once, by Skip or SkipOnly:
+// Read returns the bytes read past the BOM during detection, then any error
+// hit during detection (once), then reads from the underlying reader directly.
 func (r *Reader) Read(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -133,7 +135,9 @@ func detectUtf(rd io.Reader) (enc Encoding, buf []byte, err error) {
 		return UTF8, nilIfEmpty(buf[3:]), err
 	}
 
-	if (err != nil && err != io.EOF) || (len(buf) < 2) {
+	// A non-EOF error before all 4 bytes are read leaves FF FE ambiguous (it may start UTF-32LE);
+	// FE FF is kept Unknown in this case too, for compatibility.
+	if (err != nil && err != io.EOF && len(buf) < 4) || len(buf) < 2 {
 		return Unknown, nilIfEmpty(buf), err
 	}
 
@@ -158,7 +162,7 @@ func readBOM(rd io.Reader) (buf []byte, err error) {
 		}
 		if n > 0 {
 			nEmpty = 0
-		} else {
+		} else if err == nil {
 			nEmpty++
 			if nEmpty >= maxConsecutiveEmptyReads {
 				err = io.ErrNoProgress
