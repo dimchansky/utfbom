@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7 # let fresh releases settle before they are proposed (and auto-merged)
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch] # majors arrive as separate PRs for manual review
